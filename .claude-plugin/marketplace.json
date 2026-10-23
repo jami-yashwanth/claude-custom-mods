@@ -1,0 +1,11 @@
+{
+  "name": "claude-custom-mods",
+  "owner": { "name": "jami-yashwanth" },
+  "plugins": [
+    {
+      "name": "session-usage",
+      "source": "./session-usage",
+      "description": "Shows session usage above the prompt: context fill, 5h/7d limits, tokens, plus a details pane"
+    }
+  ]
+}
