@@ -1,6 +1,6 @@
 {
   "name": "session-usage",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shows session usage above the prompt: context fill, 5h/7d limits, cost and tokens",
   "types": "./types/index.d.ts"
 }

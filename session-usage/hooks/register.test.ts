@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { barColor, meter, severity, shortReset, thinBar } from './register'
+import { bandLayout, barColor, meter, severity, shortReset, thinBar } from './register'
 
 const BAND = {
   component: 'AbovePrompt',
@@ -124,4 +124,42 @@ test('ocean colours, red from 85%', () => {
   expect(barColor({ label: '5-hour', percent: 68 })).toBe('#1D9E75')
   expect(barColor({ label: 'Weekly', percent: 22 })).toBe('#534AB7')
   expect(barColor({ label: 'Weekly', percent: 85 })).toBe('#E24B4A')
+})
+
+test('band layout shrinks to the columns it has', () => {
+  expect(bandLayout(120, 3)).toEqual({ mode: 'full', cellWidth: 26 })
+  expect(bandLayout(80, 3)).toEqual({ mode: 'full', cellWidth: 22 })
+  expect(bandLayout(60, 3).mode).toBe('bare')
+  expect(bandLayout(40, 3).mode).toBe('text')
+})
+
+test('narrow band keeps every gauge and both buttons', async ($, on) => {
+  const NOW = Date.parse('2026-10-15T10:00:00Z')
+  mock.clock(on, { now: NOW })
+  on('session.measure', ($, e) => ({ changed: e.changed }))
+  on('session.usage', () => ({
+    value: { startedAt: 0, rateLimits: [], context: { tokens: 90_000, window: 200_000, percent: 45 } },
+  }))
+  await $.session.measure({
+    context: { tokens: 90_000, window: 200_000, percent: 45 },
+    rateLimits: [
+      { kind: 'five_hour', percentUsed: 23.5, resetsAt: '2026-10-15T12:10:00Z' },
+      { kind: 'seven_day', percentUsed: 41, resetsAt: '2026-10-18T10:00:00Z' },
+    ],
+    cost: { usd: 1 },
+    changed: ['context', 'rateLimits'],
+  })
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    for (const bodyColumns of [60, 40]) {
+      const ui = await $.ui.mount({ plugin: 'session-usage', surface, ...BAND, props: { ...BAND.props, bodyColumns } })
+      const text = (await ui.find({ type: 'Box' }))?.text ?? ''
+      expect(text).toContain('Weekly')
+      expect(text).toContain('41%')
+      expect(text).not.toContain('↻')
+      expect(await ui.find({ type: 'Button', key: 'details' })).toBeTruthy()
+      expect(await ui.find({ type: 'Button', key: 'hide' })).toBeTruthy()
+      await ui.unmount()
+    }
+  }
 })

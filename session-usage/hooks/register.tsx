@@ -127,6 +127,20 @@ const gaugesOf = (u: Usage, now: number): Gauge[] => [
   })),
 ]
 
+// paddingX, the two buttons and the gap before them
+const BAND_CHROME = 8
+const CELL_GAP = 3
+const CELL_MAX = 26
+
+export type BandLayout = { mode: 'full' | 'bare' | 'text'; cellWidth: number }
+
+// Shrink the cells to the band's columns: drop the reset hint first, then the bars
+export const bandLayout = (columns: number, count: number): BandLayout => {
+  const n = Math.max(1, count)
+  const cellWidth = Math.min(CELL_MAX, Math.floor((columns - BAND_CHROME - CELL_GAP * (n - 1)) / n))
+  return { mode: cellWidth >= 22 ? 'full' : cellWidth >= 12 ? 'bare' : 'text', cellWidth: Math.max(0, cellWidth) }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -191,22 +205,24 @@ export const register: Register = on => {
     const now = await $.clock.now()
     const gauges = gaugesOf(current, now)
     const Svg = e.surface === 'desktop' ? $.ui.resolve(e).Svg : undefined
+    const { mode, cellWidth } = bandLayout(e.props.bodyColumns, gauges.length)
+    const svgWidth = Math.round(cellWidth * 6.5)
 
     const cell = (g: Gauge) => {
       const hex = barColor(g)
       const isHot = g.percent >= 85
-      const [filled, empty] = thinBar(g.percent, 24)
+      const [filled, empty] = thinBar(g.percent, cellWidth - 2)
       return (
-        <Box flexDirection="column" width={26}>
-          <Box justifyContent="space-between">
-            <Text dimColor>{g.label}</Text>
-            <Text>
-              {g.hint ? <Text color="subtle">{`${g.hint} · `}</Text> : null}
+        <Box flexDirection="column" width={cellWidth} flexShrink={1} minWidth={0}>
+          <Box justifyContent="space-between" columnGap={1}>
+            <Text dimColor wrap="truncate">{g.label}</Text>
+            <Text wrap="truncate">
+              {g.hint && mode === 'full' ? <Text color="subtle">{`${g.hint} · `}</Text> : null}
               <Text bold {...(isHot ? { color: hex } : {})}>{`${Math.round(g.percent)}%`}</Text>
             </Text>
           </Box>
           {Svg ? (
-            <Svg source={slimBar(g.percent, hex)} alt={`${g.label}: ${g.percent}% used`} width={170} height={6} />
+            <Svg source={slimBar(g.percent, hex, svgWidth)} alt={`${g.label}: ${g.percent}% used`} width={svgWidth} height={6} />
           ) : (
             <Text>
               <Text color={hex}>{filled}</Text>
@@ -219,10 +235,24 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="row" justifyContent="space-between" alignItems="center" columnGap={2} paddingX={1}>
-        <Box flexDirection="row" columnGap={3} alignItems="center">
-          {gauges.length > 0 ? gauges.map(cell) : <Text dimColor>Usage appears after the first reply</Text>}
+        <Box flexDirection="row" columnGap={CELL_GAP} alignItems="center" flexShrink={1} minWidth={0}>
+          {gauges.length === 0 ? (
+            <Text dimColor wrap="truncate">Usage appears after the first reply</Text>
+          ) : mode === 'text' ? (
+            <Text wrap="truncate">
+              {gauges.map((g, i) => (
+                <Text>
+                  {i > 0 ? <Text color="subtle"> · </Text> : null}
+                  <Text dimColor>{`${g.label} `}</Text>
+                  <Text bold {...(g.percent >= 85 ? { color: barColor(g) } : {})}>{`${Math.round(g.percent)}%`}</Text>
+                </Text>
+              ))}
+            </Text>
+          ) : (
+            gauges.map(cell)
+          )}
         </Box>
-        <Box gap={2} alignItems="center" flexShrink={1}>
+        <Box gap={2} alignItems="center" flexShrink={0}>
           <Button key="details" label="⋯" plain dimColor onPress={() => openPane($)} />
           <Button key="hide" label="✕" plain dimColor onPress={() => update($, isHidden, () => true)} />
         </Box>
